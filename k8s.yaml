@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: nyx-nestjs
-          image: 200262187471.dkr.ecr.ap-southeast-1.amazonaws.com/nyx-api-nestjs:latest
+          image: 200262187471.dkr.ecr.ap-southeast-1.amazonaws.com/jeremy-api-nestjs:latest
           ports:
             - containerPort: 8080
 
