@@ -1,5 +1,5 @@
 # Base image
-FROM node:alpine
+FROM 200262187471.dkr.ecr.ap-southeast-1.amazonaws.com/node:alpine
 
 # Create app directory
 WORKDIR /usr/src/app
