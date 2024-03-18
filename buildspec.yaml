@@ -1,0 +1,44 @@
+---
+version: 0.2
+phases:
+  install:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin 200262187471.dkr.ecr.ap-southeast-1.amazonaws.com
+      - curl -sS -o aws-iam-authenticator https://amazon-eks.s3.us-west-2.amazonaws.com/1.19.6/2021-01-05/bin/linux/amd64/aws-iam-authenticator
+      - curl -sS -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.20.4/2021-04-12/bin/linux/amd64/kubectl
+      - chmod +x ./kubectl ./aws-iam-authenticator
+      - export PATH=$PWD/:$PATH
+  pre_build:
+      commands: 
+        - TAG="$(date +%Y-%m-%d.%H.%M.%S).$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
+        - sed -i 's@CONTAINER_IMAGE@'"$REPOSITORY:$TAG"'@' k8s.yaml
+        - aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin 200262187471.dkr.ecr.ap-southeast-1.amazonaws.com
+        - export KUBECONFIG=$HOME/.kube/config
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - COMMIT_HASH=$(echo $CODEBUILD_BUILD_NUMBER | cut -c 1-7)
+      - echo $COMMIT_HASH
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - docker build -t $REPOSITORY:latest .
+      - docker tag $REPOSITORY:latest $REPOSITORY:$TAG
+
+  post_build:
+    commands:
+      - echo $REPOSITORY
+      - echo $TAG
+      - docker push $REPOSITORY:$TAG
+      - CREDENTIALS=$(aws sts assume-role --role-arn $EKS_KUBECTL_ROLE_ARN --role-session-name codebuild-kubectl --duration-seconds 900)
+      - export AWS_ACCESS_KEY_ID="$(echo ${CREDENTIALS} | jq -r '.Credentials.AccessKeyId')"
+      - export AWS_SECRET_ACCESS_KEY="$(echo ${CREDENTIALS} | jq -r '.Credentials.SecretAccessKey')"
+      - export AWS_SESSION_TOKEN="$(echo ${CREDENTIALS} | jq -r '.Credentials.SessionToken')"
+      - export AWS_EXPIRATION=$(echo ${CREDENTIALS} | jq -r '.Credentials.Expiration')
+      - aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+      - kubectl apply -f k8s.yaml
+      - kubectl get svc
+      - kubectl get pods
+      - printf '[{"name":"eks-deployment-jeremik","imageUri":"%s"}]' $REPOSITORY:$TAG > build.json
+artifacts:
+  files: build.json
